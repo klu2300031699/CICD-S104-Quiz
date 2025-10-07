@@ -5,7 +5,7 @@ import type {
   CreateResultRequest,
 } from "@shared/api";
 
-const API_BASE = ""; // same origin
+const API_BASE = import.meta.env.PROD ? window.location.origin : ""; // Use full origin in production
 
 function getToken() {
   return localStorage.getItem("auth_token");
@@ -22,10 +22,21 @@ async function http<T>(path: string, options: RequestInit = {}): Promise<T> {
     "Content-Type": "application/json",
     ...(options.headers || {}),
   };
-  if (token) (headers as any)["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
-  if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
-  return res.json();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  
+  try {
+    const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    const data = await res.json();
+    
+    if (!res.ok) {
+      throw new Error(data.message || `HTTP ${res.status}: ${data.error || 'Unknown error'}`);
+    }
+    
+    return data;
+  } catch (err) {
+    console.error(`API Error (${path}):`, err);
+    throw err;
+  }
 }
 
 export const api = {
