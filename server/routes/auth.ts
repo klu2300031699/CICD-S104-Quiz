@@ -2,7 +2,7 @@ import { RequestHandler } from "express";
 import crypto from "crypto";
 import { db, hashPassword as dbHash } from "../db";
 
-type User = { id: string; email: string; passwordHash: string; role?: string };
+type User = { id: string; email: string; passwordHash: string; role: string };
 
 function getUserByEmail(email: string): User | undefined {
   return db.getUserByEmail(email);
@@ -50,30 +50,40 @@ function verifyToken(token: string): { valid: boolean; payload?: any } {
 function hashPassword(password: string) { return dbHash(password); }
 
 export const registerHandler: RequestHandler = (req, res) => {
-  const { email, password } = req.body as { email?: string; password?: string };
-  if (!email || !password) {
-    return res.status(400).json({ error: "email and password are required" });
+  try {
+    const { email, password } = req.body as { email?: string; password?: string };
+    if (!email || !password) {
+      return res.status(400).json({ error: "email and password are required" });
+    }
+    if (getUserByEmail(email)) {
+      return res.status(409).json({ error: "User already exists" });
+    }
+    const user: User = { id: crypto.randomUUID(), email, passwordHash: hashPassword(password), role: "user" };
+    db.createUser(user);
+    const token = signToken({ sub: user.id, email: user.email });
+    return res.status(201).json({ token, user: { id: user.id, email: user.email } });
+  } catch (err) {
+    console.error('Register error:', err);
+    return res.status(500).json({ error: 'Internal server error', message: err instanceof Error ? err.message : 'Unknown error' });
   }
-  if (getUserByEmail(email)) {
-    return res.status(409).json({ error: "User already exists" });
-  }
-  const user: User = { id: crypto.randomUUID(), email, passwordHash: hashPassword(password), role: "user" };
-  db.createUser(user);
-  const token = signToken({ sub: user.id, email: user.email });
-  res.status(201).json({ token, user: { id: user.id, email: user.email } });
 };
 
 export const loginHandler: RequestHandler = (req, res) => {
-  const { email, password } = req.body as { email?: string; password?: string };
-  if (!email || !password) {
-    return res.status(400).json({ error: "email and password are required" });
+  try {
+    const { email, password } = req.body as { email?: string; password?: string };
+    if (!email || !password) {
+      return res.status(400).json({ error: "email and password are required" });
+    }
+    const user = getUserByEmail(email);
+    if (!user || user.passwordHash !== hashPassword(password)) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+    const token = signToken({ sub: user.id, email: user.email, role: user.role });
+    return res.json({ token, user: { id: user.id, email: user.email } });
+  } catch (err) {
+    console.error('Login error:', err);
+    return res.status(500).json({ error: 'Internal server error', message: err instanceof Error ? err.message : 'Unknown error' });
   }
-  const user = getUserByEmail(email);
-  if (!user || user.passwordHash !== hashPassword(password)) {
-    return res.status(401).json({ error: "Invalid credentials" });
-  }
-  const token = signToken({ sub: user.id, email: user.email, role: user.role });
-  res.json({ token, user: { id: user.id, email: user.email } });
 };
 
 export const meHandler: RequestHandler = (req, res) => {

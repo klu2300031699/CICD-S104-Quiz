@@ -26,10 +26,25 @@ async function http<T>(path: string, options: RequestInit = {}): Promise<T> {
   
   try {
     const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
-    const data = await res.json();
+    
+    // Try to parse JSON response
+    let data;
+    const contentType = res.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+      try {
+        data = await res.json();
+      } catch (e) {
+        console.error('JSON parse error:', e);
+        throw new Error('Invalid JSON response from server');
+      }
+    } else {
+      const text = await res.text();
+      console.error('Non-JSON response:', text);
+      throw new Error('Expected JSON response from server');
+    }
     
     if (!res.ok) {
-      throw new Error(data.message || `HTTP ${res.status}: ${data.error || 'Unknown error'}`);
+      throw new Error(data.message || data.error || `HTTP ${res.status}: Unknown error`);
     }
     
     return data;
