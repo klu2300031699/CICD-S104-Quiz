@@ -1,74 +1,30 @@
-import { VercelRequest, VercelResponse } from '@vercel/node';
-import { createServer } from "../server";
-import { Request, Response } from 'express';
-import { IncomingMessage, ServerResponse } from 'http';
+import express from 'express';
+import serverless from 'serverless-http';
+import cors from 'cors';
+import { json } from 'express';
+import { authRouter } from '../server/routes/auth';
+import { adminRouter } from '../server/routes/admin';
+import { resultsRouter } from '../server/routes/results';
 
-const app = createServer();
+const app = express();
 
-// Convert Express handler to Vercel serverless function
-export default async function handler(req: VercelRequest, res: VercelResponse & Response) {
-  try {
-    // Parse body if it's a string
-    if (typeof req.body === 'string') {
-      try {
-        req.body = JSON.parse(req.body);
-      } catch (e) {
-        console.error('Body parse error:', e);
-        return res.status(400).json({ 
-          error: 'Invalid JSON',
-          message: 'The request body must be valid JSON'
-        });
-      }
-    }
+// Middleware
+app.use(cors());
+app.use(json());
 
-    // Create an Express-compatible request object
-    const expressReq = Object.assign(req, {
-      path: req.url?.replace(/^\/api/, '') || '/',
-      baseUrl: '/api',
-      originalUrl: req.url || '/',
-    }) as unknown as Request;
+// Routes
+app.use('/api/auth', authRouter);
+app.use('/api/admin', adminRouter);
+app.use('/api/results', resultsRouter);
 
-    console.log(`Processing ${req.method} request to ${req.url}`);
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    error: 'Internal Server Error',
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
 
-    // Handle the request with Express
-    return new Promise<void>((resolve) => {
-      let isResolved = false;
-      
-      // Set a timeout to ensure we always respond
-      const timeout = setTimeout(() => {
-        if (!isResolved && !res.headersSent) {
-          console.error('Request timeout');
-          res.status(504).json({ error: 'Request timeout' });
-          isResolved = true;
-          resolve();
-        }
-      }, 10000); // 10 second timeout
-
-      // Handle the request with Express
-      app(expressReq, res, (err: any) => {
-        clearTimeout(timeout);
-        
-        if (!isResolved) {
-          if (err) {
-            console.error('Express middleware error:', err);
-            res.status(500).json({
-              error: 'Internal Server Error',
-              message: err instanceof Error ? err.message : 'Unknown error occurred'
-            });
-          } else if (!res.headersSent) {
-            res.status(404).json({ error: 'Route not found' });
-          }
-          isResolved = true;
-          resolve();
-        }
-      });
-    });
-
-  } catch (err) {
-    console.error('API Error:', err);
-    return res.status(500).json({
-      error: 'Internal Server Error',
-      message: err instanceof Error ? err.message : 'Unknown error occurred'
-    });
-  }
-}
+// Export the serverless handler
+export default serverless(app);

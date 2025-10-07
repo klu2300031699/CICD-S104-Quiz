@@ -5,7 +5,10 @@ import type {
   CreateResultRequest,
 } from "@shared/api";
 
-const API_BASE = import.meta.env.PROD ? window.location.origin : ""; // Use full origin in production
+const API_BASE_URL =
+  import.meta.env.PROD || process.env.NODE_ENV === "production"
+    ? window.location.origin
+    : "http://localhost:3000/api";
 
 function getToken() {
   return localStorage.getItem("auth_token");
@@ -20,41 +23,21 @@ async function http<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   const headers: HeadersInit = {
     "Content-Type": "application/json",
-    "Accept": "application/json",
     ...(options.headers || {}),
   };
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  
+
   try {
-    console.log(`Making ${options.method || 'GET'} request to ${path}`);
-    
-    const res = await fetch(`${API_BASE}${path}`, { 
-      ...options, 
-      headers,
-      credentials: 'same-origin'
-    });
-    
-    let data;
-    try {
-      const text = await res.text();
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        console.error('Response is not JSON:', text);
-        throw new Error('Server returned invalid JSON');
-      }
-    } catch (e) {
-      console.error('Error reading response:', e);
-      throw new Error('Could not read server response');
-    }
-    
+    const res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+    const data = await res.json();
+
     if (!res.ok) {
-      const error = new Error(data.message || data.error || `HTTP ${res.status}`);
-      (error as any).status = res.status;
-      (error as any).data = data;
-      throw error;
+      throw new Error(
+        data.message ||
+          `HTTP ${res.status}: ${data.error || "Unknown error"}`
+      );
     }
-    
+
     return data;
   } catch (err) {
     console.error(`API Error (${path}):`, err);
@@ -90,16 +73,22 @@ export const api = {
     });
   },
   async adminListUsers() {
-    return http<{ users: { id: string; email: string; role?: string }[] }>("/api/admin/users");
+    return http<{
+      users: { id: string; email: string; role?: string }[];
+    }>("/api/admin/users");
   },
   async adminListResults() {
     return http<{ results: any[] }>("/api/admin/results");
   },
   async adminDeleteUser(userId: string) {
-    return http<{ message: string }>(`/api/admin/users/${userId}`, { method: "DELETE" });
+    return http<{ message: string }>(`/api/admin/users/${userId}`, {
+      method: "DELETE",
+    });
   },
   async adminGetUserResults(userId: string) {
-    return http<{ user: any; results: any[] }>(`/api/admin/users/${userId}/results`);
+    return http<{ user: any; results: any[] }>(
+      `/api/admin/users/${userId}/results`
+    );
   },
 };
 
