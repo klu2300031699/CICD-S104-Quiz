@@ -20,31 +20,39 @@ async function http<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   const headers: HeadersInit = {
     "Content-Type": "application/json",
+    "Accept": "application/json",
     ...(options.headers || {}),
   };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   
   try {
-    const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    console.log(`Making ${options.method || 'GET'} request to ${path}`);
     
-    // Try to parse JSON response
+    const res = await fetch(`${API_BASE}${path}`, { 
+      ...options, 
+      headers,
+      credentials: 'same-origin'
+    });
+    
     let data;
-    const contentType = res.headers.get("content-type");
-    if (contentType && contentType.includes("application/json")) {
-      try {
-        data = await res.json();
-      } catch (e) {
-        console.error('JSON parse error:', e);
-        throw new Error('Invalid JSON response from server');
-      }
-    } else {
+    try {
       const text = await res.text();
-      console.error('Non-JSON response:', text);
-      throw new Error('Expected JSON response from server');
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.error('Response is not JSON:', text);
+        throw new Error('Server returned invalid JSON');
+      }
+    } catch (e) {
+      console.error('Error reading response:', e);
+      throw new Error('Could not read server response');
     }
     
     if (!res.ok) {
-      throw new Error(data.message || data.error || `HTTP ${res.status}: Unknown error`);
+      const error = new Error(data.message || data.error || `HTTP ${res.status}`);
+      (error as any).status = res.status;
+      (error as any).data = data;
+      throw error;
     }
     
     return data;

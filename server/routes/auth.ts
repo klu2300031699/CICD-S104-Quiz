@@ -49,40 +49,79 @@ function verifyToken(token: string): { valid: boolean; payload?: any } {
 
 function hashPassword(password: string) { return dbHash(password); }
 
-export const registerHandler: RequestHandler = (req, res) => {
+export const registerHandler: RequestHandler = async (req, res) => {
   try {
+    console.log('Register request:', { body: req.body });
+    
     const { email, password } = req.body as { email?: string; password?: string };
     if (!email || !password) {
+      console.log('Missing email or password');
       return res.status(400).json({ error: "email and password are required" });
     }
-    if (getUserByEmail(email)) {
+    
+    const existingUser = getUserByEmail(email);
+    if (existingUser) {
+      console.log('User already exists:', email);
       return res.status(409).json({ error: "User already exists" });
     }
-    const user: User = { id: crypto.randomUUID(), email, passwordHash: hashPassword(password), role: "user" };
+    
+    const user: User = { 
+      id: crypto.randomUUID(), 
+      email, 
+      passwordHash: hashPassword(password), 
+      role: "user" 
+    };
+    
     db.createUser(user);
     const token = signToken({ sub: user.id, email: user.email });
-    return res.status(201).json({ token, user: { id: user.id, email: user.email } });
+    
+    console.log('User registered successfully:', email);
+    return res.status(201).json({ 
+      success: true,
+      token, 
+      user: { id: user.id, email: user.email } 
+    });
   } catch (err) {
     console.error('Register error:', err);
-    return res.status(500).json({ error: 'Internal server error', message: err instanceof Error ? err.message : 'Unknown error' });
+    return res.status(500).json({ 
+      error: 'Internal server error', 
+      message: err instanceof Error ? err.message : 'Unknown error' 
+    });
   }
 };
 
-export const loginHandler: RequestHandler = (req, res) => {
+export const loginHandler: RequestHandler = async (req, res) => {
   try {
+    console.log('Login request:', { body: req.body });
+    
     const { email, password } = req.body as { email?: string; password?: string };
     if (!email || !password) {
+      console.log('Missing email or password');
       return res.status(400).json({ error: "email and password are required" });
     }
+    
     const user = getUserByEmail(email);
+    console.log('User found:', !!user);
+    
     if (!user || user.passwordHash !== hashPassword(password)) {
+      console.log('Invalid credentials for:', email);
       return res.status(401).json({ error: "Invalid credentials" });
     }
+    
     const token = signToken({ sub: user.id, email: user.email, role: user.role });
-    return res.json({ token, user: { id: user.id, email: user.email } });
+    console.log('Login successful:', email);
+    
+    return res.status(200).json({ 
+      success: true,
+      token, 
+      user: { id: user.id, email: user.email } 
+    });
   } catch (err) {
     console.error('Login error:', err);
-    return res.status(500).json({ error: 'Internal server error', message: err instanceof Error ? err.message : 'Unknown error' });
+    return res.status(500).json({ 
+      error: 'Internal server error', 
+      message: err instanceof Error ? err.message : 'Unknown error' 
+    });
   }
 };
 

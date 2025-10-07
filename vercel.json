@@ -5,19 +5,24 @@
   "installCommand": "npm install --legacy-peer-deps --include=optional",
   "framework": null,
   "functions": {
-    "api/*.ts": {
+    "api/index.ts": {
       "memory": 1024,
-      "maxDuration": 10
+      "maxDuration": 10,
+      "runtime": "@vercel/node@3.0.0"
     }
   },
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/:path*",
-      "destination": "/api/index"
+      "src": "/api/(.*)",
+      "dest": "/api/index.ts"
     },
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "src": "/(.*\\.[a-z0-9]+$)",
+      "dest": "/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 }
